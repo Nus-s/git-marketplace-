@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: marketplace_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: marketplace_user
+      POSTGRES_PASSWORD: marketplace_pass
+      POSTGRES_DB: marketplace_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations/001_init_schema.sql:/docker-entrypoint-initdb.d/001_init_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marketplace_user -d marketplace_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: marketplace_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  payment-mock:
+    build:
+      context: ./mock_payment
+      dockerfile: Dockerfile
+    container_name: marketplace_payment_mock
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marketplace_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: "Marketplace Fulfillment & Flash Sale Service"
+      APP_ENV: "production"
+      DATABASE_URL: "postgresql://marketplace_user:marketplace_pass@postgres:5432/marketplace_db"
+      REDIS_URL: "redis://redis:6379/0"
+      PAYMENT_MOCK_URL: "http://payment-mock:8001"
+      RESERVE_TTL_SECONDS: "600"
+      FLASH_SALE_BUCKETS: "10"
+      RATE_LIMIT_PER_MINUTE: "1200"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      payment-mock:
+        condition: service_started
+
+volumes:
+  pgdata:

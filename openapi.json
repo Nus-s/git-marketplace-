@@ -1,0 +1,1479 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Marketplace Fulfillment & Flash Sale API",
+    "description": "Рабочий backend-сервис маркетплейса с фулфилментом и механикой Flash Sales (реализация второй части проекта по системному дизайну: 4 роли пользователей, ФТ-1..ФТ-15, ER-диаграмма из 8 основных сущностей, шардированные бакеты резерва стока с TTL, идемпотентные платежи и паттерн Transactional Outbox / Saga).",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "0. System & Health"
+        ],
+        "summary": "Healthcheck",
+        "operationId": "healthcheck_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/seed": {
+      "post": {
+        "tags": [
+          "0. System & Health"
+        ],
+        "summary": "Trigger Seed",
+        "description": "Принудительный запуск скрипта наполнения тестовыми данными (seed).",
+        "operationId": "trigger_seed_api_v1_system_seed_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/outbox": {
+      "get": {
+        "tags": [
+          "0. System & Health"
+        ],
+        "summary": "List Outbox Events",
+        "description": "Просмотр очереди событий Transactional Outbox (асинхронная шина событий Kafka / Saga).",
+        "operationId": "list_outbox_events_api_v1_system_outbox_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/products": {
+      "get": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Search Catalog",
+        "description": "ФТ-1: Покупатель ищет товары по ключевым словам, категории, бренду и диапазону цен.",
+        "operationId": "search_catalog_api_v1_catalog_products_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Поисковый запрос по названию/описанию",
+              "title": "Q"
+            },
+            "description": "Поисковый запрос по названию/описанию"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Фильтр по категории",
+              "title": "Category"
+            },
+            "description": "Фильтр по категории"
+          },
+          {
+            "name": "brand",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Фильтр по бренду",
+              "title": "Brand"
+            },
+            "description": "Фильтр по бренду"
+          },
+          {
+            "name": "min_price",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Price"
+            }
+          },
+          {
+            "name": "max_price",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Price"
+            }
+          },
+          {
+            "name": "only_flash_sale",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Показать только товары горячей распродажи",
+              "default": false,
+              "title": "Only Flash Sale"
+            },
+            "description": "Показать только товары горячей распродажи"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/products/{product_id}": {
+      "get": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Get Product Details",
+        "description": "ФТ-2: Покупатель просматривает карточку товара с актуальной ценой, остатками по складам и отзывами.",
+        "operationId": "get_product_details_api_v1_catalog_products__product_id__get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/items": {
+      "post": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Add To Cart",
+        "description": "ФТ-3: Покупатель добавляет товары в корзину и применяет промокод.",
+        "operationId": "add_to_cart_api_v1_cart_items_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/{buyer_id}": {
+      "get": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Get Cart",
+        "description": "ФТ-3: Просмотр корзины с расчётом итоговой стоимости и доступных слотов доставки.",
+        "operationId": "get_cart_api_v1_cart__buyer_id__get",
+        "parameters": [
+          {
+            "name": "buyer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Buyer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders": {
+      "post": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Create Order And Reserve Stock",
+        "description": "ФТ-4 + Узел Этапа 5: Покупатель оформляет заказ.\n• Для акционных товаров (Flash Sale) выполняется атомарный декремент в одном из 10 шардированных\n  бакетов (sku:{id}:bucket_{0..9}) с мягким резервом на TTL = 10 минут.\n• Для всех товаров увеличивается reserved_qty и уменьшается available_qty на складе фулфилмента\n  со строгой защитой от оверселлинга (0% overselling).\n• Создаётся центральная сущность Order, строки OrderItem (с фиксацией price_at_purchase) и событие Outbox.",
+        "operationId": "create_order_and_reserve_stock_api_v1_orders_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{order_id}/pay": {
+      "post": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Pay Order",
+        "description": "ФТ-5: Онлайн-оплата заказа с 100% идемпотентностью по ключу `idempotency_key` (NFR).\nВызывает внешний Mock-сервис банка-эквайера (или локальный fallback при запуске вне Docker),\nпереводит заказ в статус PAID и отправляет задание на сборку на склад фулфилмента (WMS).",
+        "operationId": "pay_order_api_v1_orders__order_id__pay_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{order_id}/cancel": {
+      "post": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Cancel Unpaid Order",
+        "description": "Компенсирующий шаг Saga (Этап 5 и Этап 7): отмена неоплаченного заказа или истечение TTL резерва.\nВозвращает зарезервированные единицы товара обратно в доступный сток склада и в бакеты Redis.",
+        "operationId": "cancel_unpaid_order_api_v1_orders__order_id__cancel_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{order_id}/tracking": {
+      "get": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Track Order",
+        "description": "ФТ-6: Покупатель отслеживает текущий статус сборки/доставки заказа и координаты курьера на карте.",
+        "operationId": "track_order_api_v1_orders__order_id__tracking_get",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{order_id}/reviews": {
+      "post": {
+        "tags": [
+          "1. Покупатель (Клиент) — ФТ-1..ФТ-6"
+        ],
+        "summary": "Create Review",
+        "description": "ФТ-6: Покупатель оставляет отзыв и оценку товару после получения заказа.",
+        "operationId": "create_review_api_v1_orders__order_id__reviews_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/products": {
+      "post": {
+        "tags": [
+          "2. Продавец (Селлер) — ФТ-7..ФТ-10"
+        ],
+        "summary": "Seller Create Product",
+        "description": "ФТ-7: Продавец создаёт новую карточку товара (SKU) в каталоге маркетплейса.",
+        "operationId": "seller_create_product_api_v1_seller_products_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/products/{product_id}/flash-sale": {
+      "put": {
+        "tags": [
+          "2. Продавец (Селлер) — ФТ-7..ФТ-10"
+        ],
+        "summary": "Seller Configure Flash Sale",
+        "description": "ФТ-8: Продавец управляет ценой товара и подключает его к горячей распродаже (Flash Sale).\nПри этом автоматически создаются 10 шардированных бакетов остатков в памяти/Redis.",
+        "operationId": "seller_configure_flash_sale_api_v1_seller_products__product_id__flash_sale_put",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlashSaleConfigUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/inbound-supplies": {
+      "post": {
+        "tags": [
+          "2. Продавец (Селлер) — ФТ-7..ФТ-10"
+        ],
+        "summary": "Seller Create Inbound Supply",
+        "description": "ФТ-9: Продавец оформляет заявку на поставку партии товаров на склад фулфилмента и пополняет остатки.",
+        "operationId": "seller_create_inbound_supply_api_v1_seller_inbound_supplies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboundSupplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seller/{seller_id}/analytics": {
+      "get": {
+        "tags": [
+          "2. Продавец (Селлер) — ФТ-7..ФТ-10"
+        ],
+        "summary": "Seller Get Analytics",
+        "description": "ФТ-10: Продавец просматривает аналитику продаж, выручку (GMV), комиссию маркетплейса и сумму к выплате.",
+        "operationId": "seller_get_analytics_api_v1_seller__seller_id__analytics_get",
+        "parameters": [
+          {
+            "name": "seller_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Seller Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/wms/receive": {
+      "post": {
+        "tags": [
+          "3. Сотрудник склада (WMS) — ФТ-11..ФТ-13"
+        ],
+        "summary": "Wms Receive And Putaway",
+        "description": "ФТ-11: Сотрудник склада сканирует поставку в ТСД и размещает товары в адресную ячейку хранения (bin_location).",
+        "operationId": "wms_receive_and_putaway_api_v1_wms_receive_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WmsReceiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/wms/picking-tasks": {
+      "get": {
+        "tags": [
+          "3. Сотрудник склада (WMS) — ФТ-11..ФТ-13"
+        ],
+        "summary": "Wms Get Picking Tasks",
+        "description": "ФТ-12: Сотрудник склада получает список оплаченных заказов (статус PAID) с маршрутом обхода адресных ячеек.",
+        "operationId": "wms_get_picking_tasks_api_v1_wms_picking_tasks_get",
+        "parameters": [
+          {
+            "name": "warehouse_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Warehouse Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/wms/orders/{order_id}/pack": {
+      "post": {
+        "tags": [
+          "3. Сотрудник склада (WMS) — ФТ-11..ФТ-13"
+        ],
+        "summary": "Wms Pack Order",
+        "description": "ФТ-13: Сотрудник склада упаковывает собранный заказ, списывает зарезервированный сток\n(reserved_qty) и переводит отправление в статус PACKED («Готов к отгрузке курьеру»).",
+        "operationId": "wms_pack_order_api_v1_wms_orders__order_id__pack_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery/orders/{order_id}/pickup": {
+      "post": {
+        "tags": [
+          "4. Курьер доставки — ФТ-14..ФТ-15"
+        ],
+        "summary": "Courier Pickup Order",
+        "description": "ФТ-14: Курьер принимает заказ в маршрутный лист, сканирует коробку на складе и выезжает к покупателю.",
+        "operationId": "courier_pickup_order_api_v1_delivery_orders__order_id__pickup_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourierAssignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery/couriers/{courier_id}/location": {
+      "post": {
+        "tags": [
+          "4. Курьер доставки — ФТ-14..ФТ-15"
+        ],
+        "summary": "Courier Update Gps",
+        "description": "ФТ-15 + NFR трекинга: Курьер передаёт свои актуальные GPS-координаты в реальном времени.",
+        "operationId": "courier_update_gps_api_v1_delivery_couriers__courier_id__location_post",
+        "parameters": [
+          {
+            "name": "courier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Courier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourierLocationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery/orders/{order_id}/complete": {
+      "post": {
+        "tags": [
+          "4. Курьер доставки — ФТ-14..ФТ-15"
+        ],
+        "summary": "Courier Complete Delivery",
+        "description": "ФТ-15: Курьер передаёт заказ покупателю и подтверждает вручение проверочным кодом из приложения клиента.",
+        "operationId": "courier_complete_delivery_api_v1_delivery_orders__order_id__complete_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CartAddRequest": {
+        "properties": {
+          "buyer_id": {
+            "type": "integer",
+            "title": "Buyer Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "default": 1
+          },
+          "promo_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promo Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "buyer_id",
+          "product_id"
+        ],
+        "title": "CartAddRequest"
+      },
+      "CourierAssignRequest": {
+        "properties": {
+          "courier_id": {
+            "type": "integer",
+            "title": "Courier Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "courier_id"
+        ],
+        "title": "CourierAssignRequest"
+      },
+      "CourierLocationUpdate": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "examples": [
+              55.7584
+            ]
+          },
+          "lon": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "examples": [
+              37.6198
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "CourierLocationUpdate"
+      },
+      "DeliveryCompleteRequest": {
+        "properties": {
+          "courier_id": {
+            "type": "integer",
+            "title": "Courier Id"
+          },
+          "verification_code": {
+            "type": "string",
+            "title": "Verification Code",
+            "description": "Проверочный код вручения из приложения покупателя"
+          }
+        },
+        "type": "object",
+        "required": [
+          "courier_id",
+          "verification_code"
+        ],
+        "title": "DeliveryCompleteRequest"
+      },
+      "FlashSaleConfigUpdate": {
+        "properties": {
+          "base_price": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Base Price"
+          },
+          "promo_price": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Promo Price"
+          },
+          "is_flash_sale": {
+            "type": "boolean",
+            "title": "Is Flash Sale",
+            "default": true
+          },
+          "flash_sale_limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Flash Sale Limit",
+            "description": "Выделенный пул штук на распродажу (делится на 10 бакетов)"
+          },
+          "warehouse_id": {
+            "type": "integer",
+            "title": "Warehouse Id",
+            "description": "Склад фулфилмента, где резервируется сток",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_price",
+          "promo_price",
+          "flash_sale_limit"
+        ],
+        "title": "FlashSaleConfigUpdate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InboundSupplyRequest": {
+        "properties": {
+          "seller_id": {
+            "type": "integer",
+            "title": "Seller Id"
+          },
+          "warehouse_id": {
+            "type": "integer",
+            "title": "Warehouse Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          },
+          "bin_location": {
+            "type": "string",
+            "title": "Bin Location",
+            "description": "Адресная ячейка размещения на складе",
+            "default": "A-12-04"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seller_id",
+          "warehouse_id",
+          "product_id",
+          "quantity"
+        ],
+        "title": "InboundSupplyRequest"
+      },
+      "OrderCreateRequest": {
+        "properties": {
+          "buyer_id": {
+            "type": "integer",
+            "title": "Buyer Id"
+          },
+          "warehouse_id": {
+            "type": "integer",
+            "title": "Warehouse Id",
+            "default": 1
+          },
+          "delivery_address": {
+            "type": "string",
+            "title": "Delivery Address",
+            "examples": [
+              "г. Москва, ул. Тверская, д. 15, кв. 42"
+            ]
+          },
+          "delivery_slot": {
+            "type": "string",
+            "title": "Delivery Slot",
+            "default": "18:00-20:00"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderItemRequest"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "buyer_id",
+          "delivery_address",
+          "items"
+        ],
+        "title": "OrderCreateRequest"
+      },
+      "OrderItemRequest": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id"
+        ],
+        "title": "OrderItemRequest"
+      },
+      "PaymentRequest": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "title": "Idempotency Key",
+            "description": "Уникальный UUID для защиты от двойного списания (NFR)"
+          },
+          "payment_method": {
+            "type": "string",
+            "title": "Payment Method",
+            "default": "CARD",
+            "examples": [
+              "CARD",
+              "SBP"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "title": "PaymentRequest"
+      },
+      "ProductCreate": {
+        "properties": {
+          "seller_id": {
+            "type": "integer",
+            "title": "Seller Id",
+            "description": "ID продавца (FK -> sellers.id)"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "examples": [
+              "Смартфоны"
+            ]
+          },
+          "brand": {
+            "type": "string",
+            "title": "Brand",
+            "examples": [
+              "Apple"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "examples": [
+              "iPhone 16 Pro 256GB Titanium"
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "default": "Флагманский смартфон с поддержкой 5G"
+          },
+          "base_price": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Base Price",
+            "examples": [
+              119990.0
+            ]
+          },
+          "promo_price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promo Price",
+            "examples": [
+              89990.0
+            ]
+          },
+          "is_flash_sale": {
+            "type": "boolean",
+            "title": "Is Flash Sale",
+            "default": false
+          },
+          "flash_sale_limit": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Flash Sale Limit",
+            "default": 0
+          },
+          "weight_g": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Weight G",
+            "default": 220
+          }
+        },
+        "type": "object",
+        "required": [
+          "seller_id",
+          "category",
+          "brand",
+          "title",
+          "base_price"
+        ],
+        "title": "ProductCreate"
+      },
+      "ReviewCreateRequest": {
+        "properties": {
+          "buyer_id": {
+            "type": "integer",
+            "title": "Buyer Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "rating": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Rating"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment",
+            "examples": [
+              "Доставили за 2 часа, телефон оригинал!"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "buyer_id",
+          "product_id",
+          "rating",
+          "comment"
+        ],
+        "title": "ReviewCreateRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WmsReceiveRequest": {
+        "properties": {
+          "warehouse_id": {
+            "type": "integer",
+            "title": "Warehouse Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          },
+          "bin_location": {
+            "type": "string",
+            "title": "Bin Location",
+            "examples": [
+              "B-04-19"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "warehouse_id",
+          "product_id",
+          "quantity",
+          "bin_location"
+        ],
+        "title": "WmsReceiveRequest"
+      }
+    }
+  }
+}
