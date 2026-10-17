@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 960" width="1600" height="960" style="background:#ffffff; font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;">
+  <defs>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#DC2626"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#16A34A"/>
+    </marker>
+    <marker id="arrow-blue2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#2563EB"/>
+    </marker>
+    <filter id="shadow2" x="-3%" y="-3%" width="106%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.05"/>
+    </filter>
+  </defs>
+
+  <text x="60" y="48" font-size="25" font-weight="700" fill="#111827">Глубокий разбор узла: Защита от оверселлинга и резерв стока в момент Flash Sale</text>
+  <text x="60" y="76" font-size="15" fill="#6B7280">Сценарий: На распродаже доступно 1 000 единиц популярного товара (SKU #42), в первую секунду приходит 50 000 запросов «Купить»</text>
+
+  <!-- ЧАСТЬ 1: НАИВНЫЙ ПОДХОД -->
+  <rect x="55" y="100" width="1490" height="235" rx="18" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="2"/>
+  <text x="85" y="135" font-size="18" font-weight="700" fill="#991B1B">1. ПРОБЛЕМА: Наивный подход — прямая блокировка строки в реляционной БД (SELECT ... FOR UPDATE)</text>
+
+  <g filter="url(#shadow2)">
+    <rect x="85" y="160" width="260" height="115" rx="14" fill="#FFFFFF" stroke="#EF4444" stroke-width="2"/>
+    <text x="215" y="196" font-size="16" font-weight="700" fill="#111827" text-anchor="middle">50 000 запросов / сек</text>
+    <text x="215" y="220" font-size="13" fill="#4B5563" text-anchor="middle">Одновременное нажатие</text>
+    <text x="215" y="240" font-size="13" fill="#DC2626" font-weight="600" text-anchor="middle">«Оформить заказ» (SKU #42)</text>
+
+    <rect x="415" y="160" width="280" height="115" rx="14" fill="#FFFFFF" stroke="#EF4444" stroke-width="2"/>
+    <text x="555" y="196" font-size="16" font-weight="700" fill="#111827" text-anchor="middle">Сервис склада (Инстансы)</text>
+    <text x="555" y="220" font-size="13" fill="#4B5563" text-anchor="middle">Открывают 50 000 транзакций</text>
+    <text x="555" y="240" font-size="13" fill="#6B7280" text-anchor="middle">в сторону главной БД</text>
+
+    <rect x="765" y="160" width="360" height="115" rx="14" fill="#FEE2E2" stroke="#DC2626" stroke-width="2.5"/>
+    <text x="945" y="192" font-size="16" font-weight="700" fill="#991B1B" text-anchor="middle">Горячая строка в SQL (Row Lock)</text>
+    <text x="945" y="216" font-size="12" font-family="Consolas, monospace" fill="#7F1D1D" text-anchor="middle">UPDATE stock SET qty=qty-1 WHERE id=42</text>
+    <text x="945" y="240" font-size="13" fill="#991B1B" text-anchor="middle">Все 50 000 потоков ждут одну блокировку</text>
+    <text x="945" y="260" font-size="12" fill="#7F1D1D" text-anchor="middle">(пропускная способность падает до ~300 TPS)</text>
+
+    <rect x="1195" y="160" width="320" height="115" rx="14" fill="#FFFFFF" stroke="#DC2626" stroke-width="2.5"/>
+    <text x="1355" y="192" font-size="16" font-weight="700" fill="#DC2626" text-anchor="middle">Каскадный отказ системы</text>
+    <text x="1355" y="216" font-size="13" fill="#374151" text-anchor="middle">• Пул соединений БД забит на 100%</text>
+    <text x="1355" y="238" font-size="13" fill="#374151" text-anchor="middle">• Время ответа &gt; 30 сек (Timeouts)</text>
+    <text x="1355" y="260" font-size="13" fill="#991B1B" font-weight="600" text-anchor="middle">• Нельзя купить даже обычные товары</text>
+  </g>
+
+  <line x1="345" y1="217" x2="407" y2="217" stroke="#DC2626" stroke-width="2.5" marker-end="url(#arrow-red)"/>
+  <line x1="695" y1="217" x2="757" y2="217" stroke="#DC2626" stroke-width="2.5" marker-end="url(#arrow-red)"/>
+  <line x1="1125" y1="217" x2="1187" y2="217" stroke="#DC2626" stroke-width="2.5" marker-end="url(#arrow-red)"/>
+
+  <!-- ЧАСТЬ 2: МАСШТАБИРУЕМОЕ РЕШЕНИЕ -->
+  <rect x="55" y="360" width="1490" height="535" rx="18" fill="#F0FDF4" stroke="#86EFAC" stroke-width="2"/>
+  <text x="85" y="396" font-size="18" font-weight="700" fill="#166534">2. РЕШЕНИЕ: Разбиение остатка на In-Memory бакеты (Striped Redis Counters) + TTL-резерв + Очередь Kafka</text>
+
+  <g filter="url(#shadow2)">
+    <!-- Шаг 1 -->
+    <rect x="85" y="490" width="235" height="125" rx="16" fill="#FFFFFF" stroke="#2563EB" stroke-width="2"/>
+    <text x="202" y="524" font-size="16" font-weight="700" fill="#111827" text-anchor="middle">Шаг 1. API Gateway</text>
+    <text x="202" y="548" font-size="13" fill="#4B5563" text-anchor="middle">• Отсев ботов / Rate Limit</text>
+    <text x="202" y="570" font-size="13" fill="#4B5563" text-anchor="middle">• Выбор бакета по хешу:</text>
+    <text x="202" y="592" font-size="13" font-family="Consolas, monospace" fill="#2563EB" font-weight="600" text-anchor="middle">bucket = hash(user_id) % 10</text>
+
+    <!-- Шаг 2: Бакеты в Redis -->
+    <rect x="395" y="425" width="295" height="74" rx="14" fill="#DCFCE7" stroke="#16A34A" stroke-width="2"/>
+    <text x="542" y="454" font-size="15" font-weight="700" fill="#14532D" text-anchor="middle">Бакет #1 (Redis Shard 1): 100 шт.</text>
+    <text x="542" y="478" font-size="12" fill="#166534" text-anchor="middle">Атомарный декремент за 0.3 мс + TTL 10 мин</text>
+
+    <rect x="395" y="515" width="295" height="74" rx="14" fill="#DCFCE7" stroke="#16A34A" stroke-width="2"/>
+    <text x="542" y="544" font-size="15" font-weight="700" fill="#14532D" text-anchor="middle">Бакет #2 (Redis Shard 2): 100 шт.</text>
+    <text x="542" y="568" font-size="12" fill="#166534" text-anchor="middle">Атомарный декремент за 0.3 мс + TTL 10 мин</text>
+
+    <rect x="395" y="605" width="295" height="74" rx="14" fill="#DCFCE7" stroke="#16A34A" stroke-width="2"/>
+    <text x="542" y="634" font-size="15" font-weight="700" fill="#14532D" text-anchor="middle">... Бакет #10 (Redis Shard 10): 100 шт.</text>
+    <text x="542" y="658" font-size="12" fill="#166534" text-anchor="middle">Суммарный пул: 10 × 100 = 1 000 единиц</text>
+
+    <!-- Отсечение лишних 49 000 запросов -->
+    <rect x="395" y="720" width="295" height="135" rx="14" fill="#FFFFFF" stroke="#9CA3AF" stroke-width="2" stroke-dasharray="6,4"/>
+    <text x="542" y="754" font-size="15" font-weight="700" fill="#374151" text-anchor="middle">Отсечение 49 000 запросов</text>
+    <text x="542" y="778" font-size="13" fill="#4B5563" text-anchor="middle">Когда счётчик бакета = 0,</text>
+    <text x="542" y="800" font-size="13" fill="#4B5563" text-anchor="middle">Redis за 0.2 мс возвращает</text>
+    <text x="542" y="822" font-size="13" fill="#16A34A" font-weight="700" text-anchor="middle">«Товар раскуплен» без обращения к БД!</text>
+
+    <!-- Шаг 3: Буфер Kafka -->
+    <rect x="770" y="485" width="300" height="135" rx="16" fill="#FFFBEB" stroke="#D97706" stroke-width="2"/>
+    <text x="920" y="520" font-size="16" font-weight="700" fill="#92400E" text-anchor="middle">Шаг 3. Очередь Kafka</text>
+    <text x="920" y="544" font-size="13" fill="#B45309" text-anchor="middle">Топик: stock.reserved</text>
+    <text x="920" y="568" font-size="13" fill="#4B5563" text-anchor="middle">Сюда попадают ровно 1 000</text>
+    <text x="920" y="590" font-size="13" fill="#4B5563" text-anchor="middle">успешных резервов (сглаживание пика)</text>
+
+    <!-- Шаг 4: Запись в PostgreSQL -->
+    <rect x="1145" y="485" width="365" height="135" rx="16" fill="#EBF3FE" stroke="#2563EB" stroke-width="2.5"/>
+    <text x="1327" y="520" font-size="16" font-weight="700" fill="#111827" text-anchor="middle">Шаг 4. PostgreSQL (Склад и Заказы)</text>
+    <text x="1327" y="545" font-size="13" fill="#1E40AF" font-weight="600" text-anchor="middle">Пакетная фиксация (Batch Write)</text>
+    <text x="1327" y="570" font-size="13" fill="#374151" text-anchor="middle">Воркеры записывают 1 000 резервов</text>
+    <text x="1327" y="592" font-size="13" fill="#16A34A" font-weight="700" text-anchor="middle">Нагрузка на диск снижена в 50 раз!</text>
+
+    <!-- Шаг 5: Контроль оплаты по TTL -->
+    <rect x="770" y="720" width="740" height="135" rx="16" fill="#FFFFFF" stroke="#16A34A" stroke-width="2"/>
+    <text x="1140" y="754" font-size="16" font-weight="700" fill="#14532D" text-anchor="middle">Шаг 5. Жизненный цикл временного резерва (Soft Reservation с TTL = 10 минут)</text>
+    <text x="1140" y="782" font-size="13" fill="#374151" text-anchor="middle">• Сценарий А (Успешная оплата): Payment Service присылает событие payment.succeeded → резерв фиксируется как SOLD</text>
+    <text x="1140" y="806" font-size="13" fill="#374151" text-anchor="middle">• Сценарий Б (Не оплачено за 10 мин / Отмена): Ключ резерва истекает по TTL → компенсирующее событие</text>
+    <text x="1140" y="830" font-size="13" fill="#16A34A" font-weight="600" text-anchor="middle">автоматически возвращает +1 единицу товара обратно в Redis-бакет (товар снова доступен реальным покупателям)</text>
+  </g>
+
+  <!-- Стрелки в блоке решения -->
+  <line x1="320" y1="530" x2="388" y2="462" stroke="#2563EB" stroke-width="2" marker-end="url(#arrow-blue2)"/>
+  <line x1="320" y1="552" x2="388" y2="552" stroke="#2563EB" stroke-width="2" marker-end="url(#arrow-blue2)"/>
+  <line x1="320" y1="574" x2="388" y2="642" stroke="#2563EB" stroke-width="2" marker-end="url(#arrow-blue2)"/>
+
+  <line x1="690" y1="462" x2="762" y2="525" stroke="#16A34A" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <line x1="690" y1="552" x2="762" y2="552" stroke="#16A34A" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <line x1="690" y1="642" x2="762" y2="580" stroke="#16A34A" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+  <line x1="1070" y1="552" x2="1137" y2="552" stroke="#2563EB" stroke-width="2.5" marker-end="url(#arrow-blue2)"/>
+  <line x1="542" y1="679" x2="542" y2="712" stroke="#9CA3AF" stroke-width="2" stroke-dasharray="5,4"/>
+  <line x1="920" y1="620" x2="920" y2="712" stroke="#16A34A" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow-green)"/>
+
+  <text x="800" y="930" font-size="14" fill="#6B7280" text-anchor="middle">глубокий разбор узла  ·  шардирование счётчика в памяти (Redis Buckets) + TTL-резерв + выравнивание нагрузки очередью (Kafka)</text>
+</svg>
