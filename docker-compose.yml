@@ -50,7 +50,7 @@ services:
     environment:
       APP_NAME: "Marketplace Fulfillment & Flash Sale Service"
       APP_ENV: "production"
-      DATABASE_URL: "postgresql://marketplace_user:marketplace_pass@postgres:5432/marketplace_db"
+      DATABASE_URL: "postgresql+psycopg2://marketplace_user:marketplace_pass@postgres:5432/marketplace_db"
       REDIS_URL: "redis://redis:6379/0"
       PAYMENT_MOCK_URL: "http://payment-mock:8001"
       RESERVE_TTL_SECONDS: "600"
